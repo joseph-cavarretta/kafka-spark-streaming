@@ -1,0 +1,113 @@
+version: "3"
+
+networks:
+  kafka-spark:
+    name: kafka-spark
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        subnet: 172.18.0.0/24
+        gateway: 172.18.0.1
+
+services:
+  zookeeper:  
+    image: 'bitnami/zookeeper:latest'
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+      - '2181:2181'
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: yes
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.2
+
+  kafka:
+    image: 'bitnami/kafka:latest'
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - '9092:9092'
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_CFG_LISTENERS=PLAINTEXT: //172.18.0.3:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://172.18.0.3:9092
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      ALLOW_PLAINTEXT_LISTENER: yes
+    depends_on:
+      - zookeeper
+    # volumes:
+    #   - kafka_data:/data
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.3
+
+  # schema-registry:
+  #   image: confluentinc/cp-schema-registry:latest
+  #   hostname: schema-registry
+  #   depends_on:
+  #     - kafka
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     SCHEMA_REGISTRY_HOST_NAME: schema-registry
+  #     SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: 'zookeeper:2181'
+  #     SCHEMA_REGISTRY_LISTENERS: http://schema-registry:8081
+  #     SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-broker-1:9092,PLAINTEXT_INTERNAL://localhost:29092
+  #     SCHEMA_REGISTRY_DEBUG: 'true'
+
+  spark:
+    image: docker.io/bitnami/spark:3
+    container_name: spark_master
+    hostname: spark_master
+    ports:
+      - "7077:7077"  # Spark master port
+      - "8080:8080"  # Spark UI port
+    user: root
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: no
+      SPARK_RPC_ENCRYPTION_ENABLED: no
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: no
+      SPARK_SSL_ENABLED: no
+    depends_on:
+      - kafka
+    # volumes:
+    #   - spark_data:/data
+    #   - /opt/spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    #   - /opt/spark/jars:/opt/bitnami/spark/ivy:z
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.4
+    #command: [ "/opt/bitnami/spark/bin/spark-submit", "--master", "spark://spark:7077", "path/to/your/spark-streaming-app.py" ]
+
+  cassandra:
+    image: 'bitnami/cassandra:latest'
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - '9042:9042'
+    environment:
+      CASSANDRA_CLUSTER_NAME: "test-cluster"
+    # volumes:
+    #   - cassandra:/data
+    depends_on:
+      - spark
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.5
+
+  python-producer:
+    image: python:3.12.1-slim
+    container_name: python-producer
+    hostname: python-producer
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"  # kafka connection
+      KAFKA_TOPIC: "test-topic" 
+    #command: ["sh", "-c", "pip install kafka-python && python /app/producer.py"]
+    depends_on:
+      - cassandra
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.6
