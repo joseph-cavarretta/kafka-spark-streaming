@@ -1,0 +1,27 @@
+{
+  "namespace": "demo.events.avro",
+  "type": "record",
+  "name": "event",
+  "fields": [
+    {
+      "name": "event_timestamp", 
+      "type": "long"
+    },
+    {
+      "name": "event_id", 
+      "type": "string"
+    },
+    {
+      "name": "event_type", 
+      "type": "string"
+    },
+    {
+      "name": "device_type", 
+      "type": "string"
+    },
+    {
+      "name": "user_id", 
+      "type": "int"
+    }
+  ]
+}
