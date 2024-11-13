@@ -9,15 +9,16 @@ logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout)
+    stream=sys.stdout
+)
 
 # Delivery report callback
 def delivery_report(err, msg):
     """Callback function for message delivery reports."""
     if err is not None:
-        print(f"Message delivery failed: {err}")
+        logger.ERROR(f"Message delivery failed: {err}")
     else:
-        print(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
+        logger.INFO(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
 
 
 if __name__ == '__main__':
