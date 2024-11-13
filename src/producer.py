@@ -76,7 +76,7 @@ class MockAvroProducer:
         events = ['click', 'pageview', 'login', 'download']
         data = {
             'event_timestamp': time.time(),
-            'event_id': str(i),
+            'event_id': i,
             'event_type': random.choice(events),
             'device_type': random.choice(devices),
             'user_id': str(uuid.uuid4())

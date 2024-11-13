@@ -26,6 +26,7 @@ if __name__ == '__main__':
     avro_producer = client.avro_producer()
 
     # Produce messages
+    logger.info(f"Starting data stream to {client.config['kafka_broker_url']}")
     for i in range(1000):
         record = client.generate_data(i)
         # Send the message using Avro serialization
@@ -34,7 +35,7 @@ if __name__ == '__main__':
             value=record,
             callback=delivery_report
         )
-        time.sleep(2)
+        time.sleep(1)
         # Poll to handle delivery reports
         avro_producer.poll(0)
 

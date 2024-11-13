@@ -9,7 +9,7 @@
     },
     {
       "name": "event_id", 
-      "type": "string"
+      "type": "int"
     },
     {
       "name": "event_type", 
@@ -21,7 +21,7 @@
     },
     {
       "name": "user_id", 
-      "type": "int"
+      "type": "string"
     }
   ]
 }
