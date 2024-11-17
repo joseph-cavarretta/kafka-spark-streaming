@@ -1,7 +1,7 @@
 import sys
 import time
 import logging
-import producer
+import producer as producer
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,11 @@ def delivery_report(err, msg):
 
 
 if __name__ == '__main__':
-    client = producer.MockAvroProducer()
+    config_path = ''
+    schema_path = ''
+    topic = ''
+    
+    client = producer.MockAvroProducer(config_path, schema_path, topic)
     avro_producer = client.avro_producer()
 
     # Produce messages

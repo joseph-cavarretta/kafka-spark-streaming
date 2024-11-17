@@ -27,7 +27,7 @@ class MockAvroProducer:
         self.schema_client = self.__get_schema_client()
         self.schema_id = self.__register_schema()
         self.schema = self.__get_schema()
-
+        
 
     def __get_config(self):
         if os.path.isfile(self.schema_path):
@@ -62,7 +62,7 @@ class MockAvroProducer:
 
     def avro_producer(self):
         self.logger.info(
-            f"""Instantiating AvroProducer for bootstrap servers at {self.config['kafka_broker_url']}, 
+            f"""Instantiating Avro Producer for kafka bootstrap servers {self.config['kafka_broker_url']}, 
             using schema client at {self.config['schema_registry_url']}""")
         return AvroProducer(
             {'bootstrap.servers': self.config['kafka_broker_url']},
