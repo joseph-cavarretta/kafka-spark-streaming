@@ -55,9 +55,11 @@ services:
         ipv4_address: 172.18.0.4
 
   spark:
-    image: docker.io/bitnami/spark:3
-    container_name: spark_master
-    hostname: spark_master
+    image: bitnami/spark:3
+    container_name: spark-master
+    hostname: spark-master
+    build:
+      context: ./src/consumer
     ports:
       - 7077:7077  # Spark master port
       - 8080:8080  # Spark UI port
@@ -77,7 +79,7 @@ services:
     networks:
       kafka-spark:
         ipv4_address: 172.18.0.5
-    command: [ "/opt/bitnami/spark/bin/spark-submit", "--master", "spark://spark:7077", "./src/consumer/spark_streaming.py" ]
+    # command: [ "/opt/bitnami/spark/bin/spark-submit", "--master", "spark://spark:7077", "./src/consumer/spark_streaming.py" ]
 
   cassandra:
     image: bitnami/cassandra:latest
@@ -99,10 +101,11 @@ services:
     image: python:3.12.1-slim
     container_name: python-producer
     hostname: python-producer
+    build:
+      context: ./src/producer
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092  # kafka connection
-      - KAFKA_TOPIC=test-topic 
-    #command: ["sh", "-c", "pip install kafka-python && python /app/producer.py"]
+      - KAFKA_TOPIC=test-topic
     depends_on:
       - cassandra
     networks:

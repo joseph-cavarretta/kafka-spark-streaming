@@ -5,4 +5,4 @@ ADD publish.py /
 
 RUN pip3 install confluent-kafka
 
-CMD [ "python", "./publish.py" ]
+ENTRYPOINT [ "python3", "./publish.py" ]
