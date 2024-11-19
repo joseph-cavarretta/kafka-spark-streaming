@@ -18,12 +18,12 @@ logging.basicConfig(
 
 
 class MockAvroProducer:
-    def __init__(self, config_path, schema_path, topic):
+    def __init__(self, config_path, schema_path):
         self.logger = logging.getLogger(__name__)
         self.config_path = config_path
         self.schema_path = schema_path
-        self.topic = topic
         self.config = self.__get_config()
+        self.topic = self.__get_topic()
         self.schema_client = self.__get_schema_client()
         self.schema_id = self.__register_schema()
         self.schema = self.__get_schema()
@@ -31,11 +31,21 @@ class MockAvroProducer:
 
     def __get_config(self):
         if os.path.isfile(self.schema_path):
-            self.logger.info(f"Reading config file at {self.config_path}")
+            self.logger.info(f"Reading config file for producer at {self.config_path}")
             with open(self.config_path) as f:
-                self.config = json.load(f)
+                return json.load(f)
         else:
             raise FileNotFoundError(f"No config file found at {self.config_path}. Config file is required.")
+
+
+    def __get_topic(self):
+        if isinstance(self.config['topic'], list):
+            raise TypeError("Lists of topics not supported. Topic must be a string")
+        
+        if not isinstance(self.config['topic'], str):
+            raise TypeError("Topic must be a string")
+
+        return self.config['topic']
 
 
     def __get_schema_client(self):

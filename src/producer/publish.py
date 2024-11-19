@@ -22,11 +22,10 @@ def delivery_report(err, msg):
 
 
 if __name__ == '__main__':
-    config_path = ''
-    schema_path = ''
-    topic = ''
+    config_path = 'config.json'
+    schema_path = 'events.avsc'
     
-    client = producer.MockAvroProducer(config_path, schema_path, topic)
+    client = producer.MockAvroProducer(config_path, schema_path)
     avro_producer = client.avro_producer()
 
     # Produce messages
