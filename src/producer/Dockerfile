@@ -1,10 +1,13 @@
 FROM python:3.12.1-slim
 
-ADD producer.py /
-ADD publish.py /
-ADD config.json /
-ADD events.avsc /
+WORKDIR /app
 
-RUN pip3 install confluent-kafka
+ADD ./producer/producer.py /app/
+ADD ./producer/publish.py /app/
+ADD config.json /app/
+ADD events.avsc /app/
 
-ENTRYPOINT [ "python3", "./publish.py" ]
+USER root
+RUN pip install urllib3 requests confluent-kafka confluent-kafka[avro]
+
+ENTRYPOINT [ "python3", "/app/publish.py" ]

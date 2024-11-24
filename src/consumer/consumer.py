@@ -1,7 +1,8 @@
 import os
+import sys
 import json
 import logging
-from pyspark.sql import SparkSession
+#from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from confluent_kafka.schema_registry import SchemaRegistryClient
@@ -25,27 +26,28 @@ class SparkAvroConsumer:
         self.topic = self.__get_topic()
         self.schema_client = self.__get_schema_client()
         self.schema = self.__get_schema()
+        self.schema_str = self.schema.schema_str
         self.deserializer = self.__get_deserializer()
         self.streaming_df = self.__create_streaming_df()
 
 
     def __get_config(self):
-        if os.path.isfile(self.schema_path):
+        if os.path.isfile(self.config_path):
             self.logger.info(f"Reading config file at {self.config_path}")
             with open(self.config_path) as f:
-                self.config = json.load(f)
+                return json.load(f)
         else:
             raise FileNotFoundError(f"No config file found at {self.config_path}. Config file is required.")
         
 
     def __get_topic(self):
-        if isinstance(self.config['topic'], list):
+        if isinstance(self.config['kafka_topic'], list):
             raise TypeError("Lists of topics not supported. Topic must be a string")
         
-        if not isinstance(self.config['topic'], str):
+        if not isinstance(self.config['kafka_topic'], str):
             raise TypeError("Topic must be a string")
 
-        return self.config['topic']
+        return self.config['kafka_topic']
     
 
     def __get_schema_client(self):
@@ -54,8 +56,8 @@ class SparkAvroConsumer:
     
 
     def __get_schema(self):
-        subject = f"{self.topic}-value"
-        schema = self.schema_registry_client.get_latest_version(subject).schema
+        subject = self.topic
+        schema = self.schema_client.get_latest_version(subject).schema
         self.logger.info(f"Using schema: {str(schema)}")
         return schema
 
@@ -64,14 +66,7 @@ class SparkAvroConsumer:
         self.logger.info("Getting avro deserializer")
         return AvroDeserializer(
             schema_str = self.schema.schema_str,
-            schema_registry_client = self.schema_registry_client
-        )
-
-
-    def __deserialize_avro(self, avro_message):
-        return self.avro_deserializer(
-            avro_message, 
-            SerializationContext(self.topic, MessageField.VALUE)
+            schema_registry_client = self.schema_client
         )
     
 
@@ -79,17 +74,20 @@ class SparkAvroConsumer:
         self.logger.info("Initializing spark dataframe")
         return self.spark.readStream \
             .format("kafka") \
-            .option("kafka.bootstrap.servers", self.config['kafka_bootstrap_servers']) \
+            .option("kafka.bootstrap.servers", self.config['kafka_broker_url']) \
             .option("subscribe", self.topic) \
             .option("group.id", self.config['kafka_group_id']) \
             .option("startingOffsets", "earliest") \
             .load()
 
-
-    def __process_message(self, message):
-        avro_data = message.value
-        deserialized_message = self.__deserialize_avro(avro_data)
-        print(deserialized_message)
+    @staticmethod
+    def __process_message(row, schema_str, schema_registry_url):
+        """ Static method used in Spark's 'foreach' avoids using 
+        instance attributes to enable parallel processing"""
+        schema_client = SchemaRegistryClient({'url': schema_registry_url})
+        deserializer = AvroDeserializer(schema_str=schema_str, schema_registry_client=schema_client)
+        deserialized_message = deserializer(row)
+        print(f"Processed Message: {deserialized_message}")
 
 
     def process_stream(self):
@@ -97,9 +95,18 @@ class SparkAvroConsumer:
         # Cast binary data to string format for deserialization
         df = self.streaming_df.withColumn("value", col("value").cast("binary"))
 
+        schema_str = self.schema_str, 
+        schema_registry_url = self.config['schema_registry_url']
+        
         # Start the streaming query
         query = df.writeStream \
-            .foreach(self.__process_message()) \
+            .foreach(
+                lambda row: self.__process_message(
+                    row['value'], 
+                    schema_str, 
+                    schema_registry_url
+                    )
+            ) \
             .start()
 
         query.awaitTermination()

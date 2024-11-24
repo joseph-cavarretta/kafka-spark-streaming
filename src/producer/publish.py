@@ -1,7 +1,8 @@
 import sys
 import time
 import logging
-import producer as producer
+import producer
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,9 @@ logging.basicConfig(
 def delivery_report(err, msg):
     """Callback function for message delivery reports."""
     if err is not None:
-        logger.ERROR(f"Message delivery failed: {err}")
+        logger.error(f"Message delivery failed: {err}")
     else:
-        logger.INFO(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
+        logger.info(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
 
 
 if __name__ == '__main__':
@@ -27,6 +28,9 @@ if __name__ == '__main__':
     
     client = producer.MockAvroProducer(config_path, schema_path)
     avro_producer = client.avro_producer()
+
+    # Give spark container time to startup
+    time.sleep(120)
 
     # Produce messages
     logger.info(f"Starting data stream to {client.config['kafka_broker_url']}")
@@ -38,7 +42,7 @@ if __name__ == '__main__':
             value=record,
             callback=delivery_report
         )
-        time.sleep(1)
+        time.sleep(3)
         # Poll to handle delivery reports
         avro_producer.poll(0)
 

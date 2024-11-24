@@ -39,13 +39,13 @@ class MockAvroProducer:
 
 
     def __get_topic(self):
-        if isinstance(self.config['topic'], list):
+        if isinstance(self.config['kafka_topic'], list):
             raise TypeError("Lists of topics not supported. Topic must be a string")
         
-        if not isinstance(self.config['topic'], str):
+        if not isinstance(self.config['kafka_topic'], str):
             raise TypeError("Topic must be a string")
 
-        return self.config['topic']
+        return self.config['kafka_topic']
 
 
     def __get_schema_client(self):
@@ -59,15 +59,19 @@ class MockAvroProducer:
             with open(self.schema_path, "r") as f:
                 schema_str = f.read()
                 schema = avro.loads(schema_str)
-            schema_id = self.schema_client.register_schema(self.topic, schema)
-            return schema_id
+            try:
+                schema_id = self.schema_client.register(self.topic, schema)
+                return schema_id
+            except avro.error.ClientError: # couldnt reach registry
+                # retry
+                raise
         else:
             raise FileNotFoundError(f"No schema file found at {self.schema_path}. Schema file is required.")
 
 
-    def __get_schema(self, schema_client, schema_id):
-        self.logger.info(f"Fetching registered schema with id {schema_id}")
-        return schema_client.get_schema(schema_id)
+    def __get_schema(self):
+        self.logger.info(f"Fetching registered schema with id {self.schema_id}")
+        return self.schema_client.get_by_id(self.schema_id)
 
 
     def avro_producer(self):

@@ -4,6 +4,7 @@ import consumer as consumer
 
 if __name__ == "__main__":
     config_path = 'config.json'
+
     spark = SparkSession.builder \
             .appName("Spark Avro Consumer") \
             .getOrCreate()

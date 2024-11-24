@@ -1,10 +1,13 @@
 FROM bitnami/spark:3
 
-ADD consumer.py /
-ADD spark_streaming.py /
-ADD config.json /
-ADD events.avsc /
+WORKDIR /app
 
-RUN pip3 install confluent-kafka pyspark
+ADD ./consumer/consumer.py /app/
+ADD ./consumer/spark_streaming.py /app/
+ADD config.json /app/
+ADD events.avsc /app/
 
-ENTRYPOINT [ "spark-submit", "./spark_streaming.py" ]
+USER root
+RUN pip install requests fastavro confluent-kafka pyspark
+
+ENTRYPOINT ["spark-submit", "--packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.2.0", "/app/spark_streaming.py"]

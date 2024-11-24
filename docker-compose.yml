@@ -17,6 +17,10 @@ services:
       - 2181:2181
     environment:
       ALLOW_ANONYMOUS_LOGIN: yes
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "172.18.0.2", "2181", "|", "grep", "imok"]
+      timeout: 10s
+      retries: 10
     networks:
       kafka-spark:
         ipv4_address: 172.18.0.2
@@ -28,13 +32,19 @@ services:
     ports:
       - 9092:9092
     environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://172.18.0.3:9092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://172.18.0.3:9092
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
+      KAFKA_BROKER_ID: 1
+      KAFKA_CFG_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_CREATE_TOPICS: events-topic:1:1
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/kafka/bin/kafka-topics.sh", "--list", "--bootstrap-server", "kafka:9092"]
+      timeout: 10s
+      retries: 10
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     # volumes:
     #   - kafka_data:/data
     networks:
@@ -43,13 +53,20 @@ services:
 
   schema-registry:
     image: confluentinc/cp-schema-registry:latest
+    container_name: schema-registry
     environment:
-      - SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://kafka:9092
-      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
     ports:
-      - 8081:8081  # Expose Schema Registry port
+      - 8081:8081
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://schema-registry:8081/"]
+      timeout: 10s
+      retries: 10
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     networks:
       kafka-spark:
         ipv4_address: 172.18.0.4
@@ -59,19 +76,21 @@ services:
     container_name: spark-master
     hostname: spark-master
     build:
-      context: ./src/consumer
+      context: ./src
+      dockerfile: consumer/Dockerfile
     ports:
       - 7077:7077  # Spark master port
       - 8080:8080  # Spark UI port
     user: root
     environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: no
+      SPARK_RPC_ENCRYPTION_ENABLED: no
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: no
+      SPARK_SSL_ENABLED: no
     depends_on:
-      - kafka
+      cassandra:
+        condition: service_healthy
     # volumes:
     #   - spark_data:/data
     #   - /opt/spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
@@ -91,8 +110,13 @@ services:
       - CASSANDRA_CLUSTER_NAME=test-cluster
     # volumes:
     #   - cassandra:/data
+    healthcheck:
+      test: ["CMD", "nodetool", "status"]
+      timeout: 10s
+      retries: 10
     depends_on:
-      - spark
+      schema-registry:
+        condition: service_healthy
     networks:
       kafka-spark:
         ipv4_address: 172.18.0.6
@@ -102,12 +126,14 @@ services:
     container_name: python-producer
     hostname: python-producer
     build:
-      context: ./src/producer
+      context: ./src
+      dockerfile: producer/Dockerfile
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092  # kafka connection
       - KAFKA_TOPIC=test-topic
     depends_on:
-      - cassandra
+      cassandra:
+        condition: service_healthy
     networks:
       kafka-spark:
         ipv4_address: 172.18.0.7
