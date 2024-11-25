@@ -30,6 +30,7 @@ if __name__ == '__main__':
     avro_producer = client.avro_producer()
 
     # Give spark container time to startup
+    logger.info("Waiting 2 minutes before producing messages ...")
     time.sleep(120)
 
     # Produce messages

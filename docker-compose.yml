@@ -89,7 +89,7 @@ services:
       SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: no
       SPARK_SSL_ENABLED: no
     depends_on:
-      cassandra:
+      schema-registry:
         condition: service_healthy
     # volumes:
     #   - spark_data:/data
@@ -98,28 +98,27 @@ services:
     networks:
       kafka-spark:
         ipv4_address: 172.18.0.5
-    # command: [ "/opt/bitnami/spark/bin/spark-submit", "--master", "spark://spark:7077", "./src/consumer/spark_streaming.py" ]
 
-  cassandra:
-    image: bitnami/cassandra:latest
-    container_name: cassandra
-    hostname: cassandra
-    ports:
-      - 9042:9042
-    environment:
-      - CASSANDRA_CLUSTER_NAME=test-cluster
-    # volumes:
-    #   - cassandra:/data
-    healthcheck:
-      test: ["CMD", "nodetool", "status"]
-      timeout: 10s
-      retries: 10
-    depends_on:
-      schema-registry:
-        condition: service_healthy
-    networks:
-      kafka-spark:
-        ipv4_address: 172.18.0.6
+  # cassandra:
+  #   image: bitnami/cassandra:latest
+  #   container_name: cassandra
+  #   hostname: cassandra
+  #   ports:
+  #     - 9042:9042
+  #   environment:
+  #     - CASSANDRA_CLUSTER_NAME=test-cluster
+  #   # volumes:
+  #   #   - cassandra:/data
+  #   healthcheck:
+  #     test: ["CMD", "nodetool", "status"]
+  #     timeout: 10s
+  #     retries: 10
+  #   depends_on:
+  #     schema-registry:
+  #       condition: service_healthy
+  #   networks:
+  #     kafka-spark:
+  #       ipv4_address: 172.18.0.6
 
   python-producer:
     image: python:3.12.1-slim
@@ -132,7 +131,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092  # kafka connection
       - KAFKA_TOPIC=test-topic
     depends_on:
-      cassandra:
+      schema-registry:
         condition: service_healthy
     networks:
       kafka-spark:

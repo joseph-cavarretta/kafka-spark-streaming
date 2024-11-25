@@ -103,8 +103,8 @@ class SparkAvroConsumer:
             .foreach(
                 lambda row: self.__process_message(
                     row['value'], 
-                    schema_str, 
-                    schema_registry_url
+                    self.schema_str, 
+                    self.config['schema_registry_url']
                     )
             ) \
             .start()
