@@ -31,7 +31,7 @@ class MockAvroProducer:
 
     def __get_config(self):
         if os.path.isfile(self.schema_path):
-            self.logger.info(f"Reading config file for producer at {self.config_path}")
+            self.logger.info(f"Reading config file for producer at {self.config_path} ...")
             with open(self.config_path) as f:
                 return json.load(f)
         else:
@@ -53,31 +53,38 @@ class MockAvroProducer:
         return CachedSchemaRegistryClient({'url': self.config['schema_registry_url']})
     
 
-    def __register_schema(self):
+    def __register_schema(self, max_retries=2):
         if os.path.isfile(self.schema_path):
-            self.logger.info(f"Reading and registering schema from {self.schema_path}")
+            self.logger.info(f"Reading and registering schema from {self.schema_path} ...")
             with open(self.schema_path, "r") as f:
                 schema_str = f.read()
                 schema = avro.loads(schema_str)
-            try:
-                schema_id = self.schema_client.register(self.topic, schema)
-                return schema_id
-            except avro.error.ClientError: # couldnt reach registry
-                # retry
-                raise
+            for n in range(max_retries+1):
+                try:
+                    self.logger.info(f"Attempting to register schema at {self.config['schema_registry_url']}: attempt #{n+1} ...")
+                    schema_id = self.schema_client.register(self.topic, schema)
+                    return schema_id
+                except avro.error.ClientError as err: # couldnt reach registry
+                    self.logger.error(err)
+                    if n != max_retries:
+                        backoff_duration = n+1**n
+                        self.logger.info(f'Retrying in {backoff_duration} seconds')
+                        time.sleep(backoff_duration)
+                    else:
+                        raise err
         else:
             raise FileNotFoundError(f"No schema file found at {self.schema_path}. Schema file is required.")
 
 
     def __get_schema(self):
-        self.logger.info(f"Fetching registered schema with id {self.schema_id}")
+        self.logger.info(f"Fetching registered schema with id {self.schema_id} ...")
         return self.schema_client.get_by_id(self.schema_id)
 
 
     def avro_producer(self):
         self.logger.info(
-            f"""Instantiating Avro Producer for kafka bootstrap servers {self.config['kafka_broker_url']}, 
-            using schema client at {self.config['schema_registry_url']}""")
+            f"""Setting up Avro Producer for Kafka bootstrap servers at {self.config['kafka_broker_url']}, 
+            using schema client at {self.config['schema_registry_url']} ...""")
         return AvroProducer(
             {'bootstrap.servers': self.config['kafka_broker_url']},
             schema_registry = self.schema_client,
