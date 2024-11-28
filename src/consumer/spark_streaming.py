@@ -78,13 +78,6 @@ def create_streaming_df(kafka_topic, kafka_broker_url, kafka_group_id):
         .option("startingOffsets", "earliest") \
         .load()
 
-# def deserialize_avro_message(avro_data, deserializer, topic):
-#     """Deserialize Avro data."""
-#     return deserializer(
-#         avro_data,
-#         SerializationContext(topic, MessageField.VALUE)
-#     )
-
 
 def deserialize_message(row, schema_client, schema_str, topic):
     """Process a single Kafka message."""
@@ -121,10 +114,12 @@ if __name__ == "__main__":
     def process_message(row):
         schema_registry_client = SchemaRegistryClient({"url": "http://schema-registry:8081"})
         schema_str, topic = schema_broadcast.value
-        deserialized_message = deserialize_message(row,
-                                                   schema_registry_client,
-                                                   schema_str, 
-                                                   topic)
+        deserialized_message = deserialize_message(
+            row,
+            schema_registry_client,
+            schema_str, 
+            topic
+        )
         print(f"Deserialized Message: {deserialized_message}")
 
     # Cast the "value" column to binary
