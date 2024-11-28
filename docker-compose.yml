@@ -99,26 +99,26 @@ services:
       kafka-spark:
         ipv4_address: 172.18.0.5
 
-  # cassandra:
-  #   image: bitnami/cassandra:latest
-  #   container_name: cassandra
-  #   hostname: cassandra
-  #   ports:
-  #     - 9042:9042
-  #   environment:
-  #     - CASSANDRA_CLUSTER_NAME=test-cluster
-  #   # volumes:
-  #   #   - cassandra:/data
-  #   healthcheck:
-  #     test: ["CMD", "nodetool", "status"]
-  #     timeout: 10s
-  #     retries: 10
-  #   depends_on:
-  #     schema-registry:
-  #       condition: service_healthy
-  #   networks:
-  #     kafka-spark:
-  #       ipv4_address: 172.18.0.6
+  cassandra:
+    image: bitnami/cassandra:latest
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - 9042:9042
+    environment:
+      - CASSANDRA_CLUSTER_NAME=test-cluster
+    # volumes:
+    #   - cassandra:/data
+    healthcheck:
+      test: ["CMD", "nodetool", "status"]
+      timeout: 10s
+      retries: 10
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+    networks:
+      kafka-spark:
+        ipv4_address: 172.18.0.6
 
   python-producer:
     image: python:3.12.1-slim
@@ -128,7 +128,7 @@ services:
       context: ./src
       dockerfile: producer/Dockerfile
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092  # kafka connection
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_TOPIC=test-topic
     depends_on:
       schema-registry:
