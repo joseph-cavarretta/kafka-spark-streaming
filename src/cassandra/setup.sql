@@ -6,7 +6,7 @@ WITH replication = {
 
 USE events;
 
-CREATE TABLE test_table (
+CREATE TABLE user_actions (
     event_timestamp INT,
     event_id INT,
     event_type TEXT,

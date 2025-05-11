@@ -111,22 +111,29 @@ if __name__ == "__main__":
 
     df = create_streaming_df(kafka_topic, kafka_broker_url, kafka_group_id)
 
-    def process_message(row):
+    def write_to_stdout(row):
         schema_registry_client = SchemaRegistryClient({"url": "http://schema-registry:8081"})
         schema_str, topic = schema_broadcast.value
         deserialized_message = deserialize_message(
             row,
             schema_registry_client,
-            schema_str, 
+            schema_str,
             topic
         )
         print(f"Deserialized Message: {deserialized_message}")
 
+    def write_to_cassandra(df):
+        df.write \
+        .format("org.apache.spark.sql.cassandra") \
+        .mode("append") \
+        .options(table="user_actions", keyspace="events") \
+        .save()
+    
     # Cast the "value" column to binary
     processed_df = df.withColumn("value", sql.col("value").cast("binary"))
 
     # Start the streaming query
     query = processed_df.writeStream \
-        .foreach(process_message) \
+        .foreach(write_to_cassandra) \
         .start() \
         .awaitTermination()

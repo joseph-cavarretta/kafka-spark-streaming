@@ -95,12 +95,13 @@ class MockAvroProducer:
     def generate_data(self, i):
         devices = ['mobile', 'tablet', 'laptop']
         events = ['click', 'pageview', 'login', 'download']
+        users = [str(uuid.uuid4()) for _ in range(100)]
         data = {
             'event_timestamp': time.time(),
             'event_id': i,
             'event_type': random.choice(events),
             'device_type': random.choice(devices),
-            'user_id': str(uuid.uuid4())
+            'user_id': random.choice(users)
         }
         self.logger.info(f"Message generated: {data}")
         return data
