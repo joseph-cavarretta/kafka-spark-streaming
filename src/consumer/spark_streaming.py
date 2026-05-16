@@ -132,8 +132,8 @@ if __name__ == "__main__":
     # Cast the "value" column to binary
     processed_df = df.withColumn("value", sql.col("value").cast("binary"))
 
-    # Start the streaming query
+    # foreachBatch receives a full micro-batch DataFrame, required for datasource writes
     query = processed_df.writeStream \
-        .foreach(write_to_cassandra) \
+        .foreachBatch(lambda batch_df, _: write_to_cassandra(batch_df)) \
         .start() \
         .awaitTermination()
