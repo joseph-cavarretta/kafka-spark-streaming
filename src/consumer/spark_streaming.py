@@ -2,12 +2,13 @@ import json
 import logging
 import os
 import sys
+from typing import Any
 
-from pyspark.sql import SparkSession, DataFrame
 import pyspark.sql.functions as sql
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
-from confluent_kafka.serialization import SerializationContext, MessageField
+from confluent_kafka.serialization import MessageField, SerializationContext
+from pyspark.sql import DataFrame, SparkSession
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +24,7 @@ def get_spark_session(session_name: str) -> SparkSession:
     return SparkSession.builder.appName(session_name).getOrCreate()
 
 
-def get_config(config_path: str) -> dict:
+def get_config(config_path: str) -> dict[str, Any]:
     """Load and validate the consumer config from a JSON file.
 
     Args:
@@ -42,12 +43,12 @@ def get_config(config_path: str) -> dict:
         )
     logger.info("Reading config file at %s", config_path)
     with open(config_path) as f:
-        config = json.load(f)
+        config: dict[str, Any] = json.load(f)
     _validate_config(config)
     return config
 
 
-def _validate_config(config: dict) -> None:
+def _validate_config(config: dict[str, Any]) -> None:
     """Raise if the config is missing or has an invalid kafka_topic."""
     if not config.get("kafka_topic"):
         raise KeyError("kafka_topic key not found in config.")
@@ -57,7 +58,7 @@ def _validate_config(config: dict) -> None:
         raise TypeError("Topic must be a string.")
 
 
-def get_latest_schema(schema_registry_url: str, topic: str) -> object:
+def get_latest_schema(schema_registry_url: str, topic: str) -> Any:
     """Fetch the latest registered schema version for a topic.
 
     Args:
@@ -100,11 +101,11 @@ def create_streaming_df(
 
 
 def deserialize_message(
-    row: object,
+    row: Any,
     schema_client: SchemaRegistryClient,
     schema_str: str,
     topic: str,
-) -> dict:
+) -> dict[str, Any]:
     """Deserialize a single Avro-encoded Kafka message value.
 
     Args:
@@ -116,8 +117,13 @@ def deserialize_message(
     Returns:
         Deserialized message as a dict.
     """
-    deserializer = AvroDeserializer(schema_registry_client=schema_client, schema_str=schema_str)
-    return deserializer(row.value, SerializationContext(topic, MessageField.VALUE))
+    deserializer = AvroDeserializer(
+        schema_registry_client=schema_client, schema_str=schema_str
+    )
+    message: dict[str, Any] = deserializer(
+        row.value, SerializationContext(topic, MessageField.VALUE)
+    )
+    return message
 
 
 def write_to_cassandra(batch_df: DataFrame) -> None:
