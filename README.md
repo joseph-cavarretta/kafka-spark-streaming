@@ -56,6 +56,15 @@ make down
 Services start in dependency order: Zookeeper → Kafka → Schema Registry → Spark + Cassandra → Producer.
 The producer waits 2 minutes after startup before emitting events to allow Spark to initialize.
 
+## Development
+
+Dependencies are managed with [uv](https://docs.astral.sh/uv/):
+
+```bash
+make install     # uv sync
+make check       # ruff lint + format check + mypy
+```
+
 ## Services
 
 | Service | Port | Description |
