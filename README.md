@@ -1,5 +1,7 @@
 # Kafka Spark Streaming
 
+[![CI](https://github.com/joseph-cavarretta/kafka-spark-streaming/actions/workflows/ci.yml/badge.svg)](https://github.com/joseph-cavarretta/kafka-spark-streaming/actions/workflows/ci.yml)
+
 A real-time event streaming pipeline that ingests mock user behavior events, processes them with Apache Spark Structured Streaming, and persists results to Apache Cassandra.
 
 ## Architecture
@@ -71,7 +73,7 @@ Events are written to the `events` keyspace:
 
 ```sql
 CREATE TABLE user_actions (
-    event_timestamp INT,
+    event_timestamp BIGINT,
     event_id        INT,
     event_type      TEXT,
     device_type     TEXT,

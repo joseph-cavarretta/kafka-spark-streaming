@@ -1,6 +1,7 @@
 import logging
 import sys
 import time
+from typing import Any
 
 import producer
 
@@ -13,19 +14,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def delivery_report(err: Exception | None, msg: object) -> None:
+def delivery_report(err: Exception | None, msg: Any) -> None:
     """Log the result of a message delivery attempt.
 
     Args:
         err: Delivery error, or None on success.
-        msg: The delivered message object.
+        msg: The delivered confluent_kafka Message object.
     """
     if err is not None:
         logger.error("Message delivery failed: %s", err)
     else:
         logger.info(
             "Message delivered to %s [%s] at offset %s",
-            msg.topic(), msg.partition(), msg.offset(),
+            msg.topic(),
+            msg.partition(),
+            msg.offset(),
         )
 
 
@@ -43,7 +46,9 @@ if __name__ == "__main__":
     logger.info("Starting data stream to %s", client.config["kafka_broker_url"])
     for i in range(1000):
         record = client.generate_data(i)
-        avro_producer.produce(topic=client.topic, value=record, callback=delivery_report)
+        avro_producer.produce(
+            topic=client.topic, value=record, callback=delivery_report
+        )
         time.sleep(3)
         avro_producer.poll(0)
 

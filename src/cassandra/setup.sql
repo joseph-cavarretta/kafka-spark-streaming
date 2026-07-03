@@ -7,7 +7,7 @@ WITH replication = {
 USE events;
 
 CREATE TABLE user_actions (
-    event_timestamp INT,
+    event_timestamp BIGINT,
     event_id INT,
     event_type TEXT,
     device_type TEXT,

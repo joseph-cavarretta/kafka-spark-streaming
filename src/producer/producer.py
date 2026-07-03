@@ -1,13 +1,14 @@
 import json
 import logging
 import os
+import random
 import sys
 import time
 import uuid
-import random
+from typing import Any
 
 from confluent_kafka import avro
-from confluent_kafka.avro import CachedSchemaRegistryClient, AvroProducer
+from confluent_kafka.avro import AvroProducer, CachedSchemaRegistryClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +31,7 @@ class MockAvroProducer:
         self.schema_id = self._register_schema()
         self.schema = self._get_schema()
 
-    def _get_config(self) -> dict:
+    def _get_config(self) -> dict[str, Any]:
         """Load producer configuration from the JSON config file."""
         if not os.path.isfile(self.config_path):
             raise FileNotFoundError(
@@ -38,7 +39,8 @@ class MockAvroProducer:
             )
         self.logger.info("Reading config file for producer at %s ...", self.config_path)
         with open(self.config_path) as f:
-            return json.load(f)
+            config: dict[str, Any] = json.load(f)
+        return config
 
     def _get_topic(self) -> str:
         """Validate and return the Kafka topic name from config."""
@@ -81,15 +83,16 @@ class MockAvroProducer:
         for attempt in range(max_retries + 1):
             try:
                 self.logger.info("Schema registration attempt #%d ...", attempt + 1)
-                return self.schema_client.register(self.topic, schema)
+                schema_id: int = self.schema_client.register(self.topic, schema)
+                return schema_id
             except avro.error.ClientError as err:
                 self.logger.error(err)
-                if attempt < max_retries:
-                    backoff = attempt + 1
-                    self.logger.info("Retrying in %d seconds", backoff)
-                    time.sleep(backoff)
-                else:
+                if attempt == max_retries:
                     raise
+                backoff = attempt + 1
+                self.logger.info("Retrying in %d seconds", backoff)
+                time.sleep(backoff)
+        raise AssertionError("unreachable: retry loop always returns or raises")
 
     def _get_schema(self) -> object:
         """Fetch the registered schema object by ID."""
@@ -107,7 +110,7 @@ class MockAvroProducer:
             default_value_schema=self.schema,
         )
 
-    def generate_data(self, event_id: int) -> dict:
+    def generate_data(self, event_id: int) -> dict[str, Any]:
         """Generate a single synthetic user event record.
 
         Args:
@@ -120,7 +123,7 @@ class MockAvroProducer:
         events = ["click", "pageview", "login", "download"]
         users = [str(uuid.uuid4()) for _ in range(100)]
         data = {
-            "event_timestamp": time.time(),
+            "event_timestamp": int(time.time()),
             "event_id": event_id,
             "event_type": random.choice(events),
             "device_type": random.choice(devices),
