@@ -440,7 +440,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "confluent-kafka", extras = ["avro"], specifier = ">=2.4.0" },
+    { name = "confluent-kafka", extras = ["avro"], specifier = ">=2.15.0" },
     { name = "fastavro", specifier = ">=1.9.0" },
     { name = "pyspark", specifier = ">=3.5.0" },
     { name = "requests", specifier = ">=2.32.0" },
