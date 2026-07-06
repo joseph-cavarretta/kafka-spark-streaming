@@ -1,6 +1,0 @@
-{
-    "schema_registry_url": "http://schema-registry:8081",
-    "kafka_broker_url": "kafka:9092",
-    "kafka_topic": "events-topic",
-    "kafka_group_id": "events-group-1"
-}

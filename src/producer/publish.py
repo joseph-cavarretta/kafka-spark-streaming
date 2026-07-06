@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 import producer
+from config import get_settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,21 +34,21 @@ def delivery_report(err: Exception | None, msg: Any) -> None:
 
 
 if __name__ == "__main__":
-    config_path = "config.json"
+    settings = get_settings()
     schema_path = "events.avsc"
 
-    client = producer.MockAvroProducer(config_path, schema_path)
+    client = producer.MockAvroProducer(settings, schema_path)
     avro_producer = client.avro_producer()
 
     # allow spark container time to initialize before messages arrive
     logger.info("Waiting 2 minutes before producing messages ...")
     time.sleep(120)
 
-    logger.info("Starting data stream to %s", client.config["kafka_broker_url"])
+    logger.info("Starting data stream to %s", settings.kafka_broker_url)
     for i in range(1000):
         record = client.generate_data(i)
         avro_producer.produce(
-            topic=client.topic, value=record, callback=delivery_report
+            topic=settings.kafka_topic, value=record, callback=delivery_report
         )
         time.sleep(3)
         avro_producer.poll(0)

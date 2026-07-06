@@ -1,6 +1,4 @@
-import json
 import logging
-import os
 import sys
 from typing import Any
 
@@ -9,6 +7,8 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import MessageField, SerializationContext
 from pyspark.sql import DataFrame, SparkSession
+
+from config import get_settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,40 +22,6 @@ logger = logging.getLogger(__name__)
 def get_spark_session(session_name: str) -> SparkSession:
     """Create or retrieve the active SparkSession."""
     return SparkSession.builder.appName(session_name).getOrCreate()
-
-
-def get_config(config_path: str) -> dict[str, Any]:
-    """Load and validate the consumer config from a JSON file.
-
-    Args:
-        config_path: Path to the JSON configuration file.
-
-    Returns:
-        Validated config dict.
-
-    Raises:
-        FileNotFoundError: If the config file does not exist.
-        TypeError: If kafka_topic is not a string.
-    """
-    if not os.path.isfile(config_path):
-        raise FileNotFoundError(
-            f"No config file found at {config_path}. Config file is required."
-        )
-    logger.info("Reading config file at %s", config_path)
-    with open(config_path) as f:
-        config: dict[str, Any] = json.load(f)
-    _validate_config(config)
-    return config
-
-
-def _validate_config(config: dict[str, Any]) -> None:
-    """Raise if the config is missing or has an invalid kafka_topic."""
-    if not config.get("kafka_topic"):
-        raise KeyError("kafka_topic key not found in config.")
-    if isinstance(config["kafka_topic"], list):
-        raise TypeError("Lists of topics not supported. Topic must be a string.")
-    if not isinstance(config["kafka_topic"], str):
-        raise TypeError("Topic must be a string.")
 
 
 def get_latest_schema(schema_registry_url: str, topic: str) -> Any:
@@ -134,12 +100,12 @@ def write_to_cassandra(batch_df: DataFrame) -> None:
 
 
 if __name__ == "__main__":
-    config = get_config("config.json")
+    settings = get_settings()
 
-    schema_registry_url: str = config["schema_registry_url"]
-    kafka_broker_url: str = config["kafka_broker_url"]
-    kafka_topic: str = config["kafka_topic"]
-    kafka_group_id: str = config["kafka_group_id"]
+    schema_registry_url = settings.schema_registry_url
+    kafka_broker_url = settings.kafka_broker_url
+    kafka_topic = settings.kafka_topic
+    kafka_group_id = settings.kafka_group_id
 
     spark = get_spark_session("Spark Avro Consumer")
     spark.sparkContext.setLogLevel("WARN")
