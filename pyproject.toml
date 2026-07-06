@@ -34,3 +34,9 @@ known-first-party = ["src"]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# confluent_kafka.avro ships partial stubs that don't export or type the
+# Avro producer/schema-registry helpers used here. Treat it as a boundary.
+module = ["confluent_kafka.*"]
+follow_imports = "skip"
