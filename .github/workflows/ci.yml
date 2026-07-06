@@ -7,7 +7,7 @@ on:
 
 jobs:
   lint:
-    name: Lint and type-check
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +24,19 @@ jobs:
 
       - name: Ruff format
         run: uv run --no-sync ruff format --check .
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install project (validates lockfile)
+        run: uv sync --locked
 
       - name: Mypy
         run: uv run --no-sync mypy src
