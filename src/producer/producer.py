@@ -1,14 +1,21 @@
-import json
 import logging
-import os
 import random
 import sys
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from confluent_kafka import avro
 from confluent_kafka.avro import AvroProducer, CachedSchemaRegistryClient
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_incrementing,
+)
+
+from config import KafkaSettings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,49 +28,24 @@ logging.basicConfig(
 class MockAvroProducer:
     """Kafka Avro producer that generates and publishes synthetic user events."""
 
-    def __init__(self, config_path: str, schema_path: str) -> None:
+    def __init__(self, settings: KafkaSettings, schema_path: str) -> None:
         self.logger = logging.getLogger(__name__)
-        self.config_path = config_path
-        self.schema_path = schema_path
-        self.config = self._get_config()
-        self.topic = self._get_topic()
+        self.settings = settings
+        self.schema_path = Path(schema_path)
         self.schema_client = self._get_schema_client()
         self.schema_id = self._register_schema()
         self.schema = self._get_schema()
-
-    def _get_config(self) -> dict[str, Any]:
-        """Load producer configuration from the JSON config file."""
-        if not os.path.isfile(self.config_path):
-            raise FileNotFoundError(
-                f"No config file found at {self.config_path}. Config file is required."
-            )
-        self.logger.info("Reading config file for producer at %s ...", self.config_path)
-        with open(self.config_path) as f:
-            config: dict[str, Any] = json.load(f)
-        return config
-
-    def _get_topic(self) -> str:
-        """Validate and return the Kafka topic name from config."""
-        topic = self.config["kafka_topic"]
-        if isinstance(topic, list):
-            raise TypeError("Lists of topics not supported. Topic must be a string.")
-        if not isinstance(topic, str):
-            raise TypeError("Topic must be a string.")
-        return topic
 
     def _get_schema_client(self) -> CachedSchemaRegistryClient:
         """Instantiate a cached schema registry client."""
         self.logger.info(
             "Retrieving cached schema registry client for %s",
-            self.config["schema_registry_url"],
+            self.settings.schema_registry_url,
         )
-        return CachedSchemaRegistryClient({"url": self.config["schema_registry_url"]})
+        return CachedSchemaRegistryClient({"url": self.settings.schema_registry_url})
 
-    def _register_schema(self, max_retries: int = 2) -> int:
-        """Register the Avro schema with the schema registry, with retries.
-
-        Args:
-            max_retries: Number of additional attempts after the first failure.
+    def _register_schema(self) -> int:
+        """Load and register the Avro schema with the schema registry.
 
         Returns:
             The integer schema ID assigned by the registry.
@@ -72,27 +54,24 @@ class MockAvroProducer:
             FileNotFoundError: If the schema file does not exist.
             avro.error.ClientError: If all registration attempts fail.
         """
-        if not os.path.isfile(self.schema_path):
+        if not self.schema_path.is_file():
             raise FileNotFoundError(
                 f"No schema file found at {self.schema_path}. Schema file is required."
             )
         self.logger.info("Registering schema from %s ...", self.schema_path)
-        with open(self.schema_path) as f:
-            schema = avro.loads(f.read())
+        schema = avro.loads(self.schema_path.read_text())
+        return self._register_with_retry(schema)
 
-        for attempt in range(max_retries + 1):
-            try:
-                self.logger.info("Schema registration attempt #%d ...", attempt + 1)
-                schema_id: int = self.schema_client.register(self.topic, schema)
-                return schema_id
-            except avro.error.ClientError as err:
-                self.logger.error(err)
-                if attempt == max_retries:
-                    raise
-                backoff = attempt + 1
-                self.logger.info("Retrying in %d seconds", backoff)
-                time.sleep(backoff)
-        raise AssertionError("unreachable: retry loop always returns or raises")
+    @retry(
+        retry=retry_if_exception_type(avro.error.ClientError),
+        stop=stop_after_attempt(3),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def _register_with_retry(self, schema: object) -> int:
+        """Register the schema, retrying on transient registry errors."""
+        schema_id: int = self.schema_client.register(self.settings.kafka_topic, schema)
+        return schema_id
 
     def _get_schema(self) -> object:
         """Fetch the registered schema object by ID."""
@@ -102,10 +81,10 @@ class MockAvroProducer:
     def avro_producer(self) -> AvroProducer:
         """Build and return a configured AvroProducer."""
         self.logger.info(
-            "Setting up Avro Producer for %s ...", self.config["kafka_broker_url"]
+            "Setting up Avro Producer for %s ...", self.settings.kafka_broker_url
         )
         return AvroProducer(
-            {"bootstrap.servers": self.config["kafka_broker_url"]},
+            {"bootstrap.servers": self.settings.kafka_broker_url},
             schema_registry=self.schema_client,
             default_value_schema=self.schema,
         )
