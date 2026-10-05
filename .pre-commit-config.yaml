@@ -1,13 +1,25 @@
+# Local hooks run the tool versions pinned in uv.lock, so they never drift from CI.
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.8
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types: [python]
       - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types: [python]
+      - id: docstring-length
+        name: docstring length
+        entry: uv run python ../agent-dev-harness/python-styleguide/docstring_length.py
+        language: system
+        types: [python]
       - id: mypy
-        args: [--config-file=pyproject.toml]
+        name: mypy
+        entry: uv run mypy .
+        language: system
+        types: [python]
+        pass_filenames: false

@@ -1,22 +1,16 @@
-import json
 import logging
-import os
 import sys
-from typing import Any
+from pathlib import Path
 
 import pyspark.sql.functions as sql
-from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry.avro import AvroDeserializer
-from confluent_kafka.serialization import MessageField, SerializationContext
+from confluent_kafka.schema_registry import RegisteredSchema, SchemaRegistryClient
 from pyspark.sql import DataFrame, SparkSession
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
-)
+from streaming_config import load_config
+
 logger = logging.getLogger(__name__)
+
+CONFIG_PATH = Path("config.json")
 
 
 def get_spark_session(session_name: str) -> SparkSession:
@@ -24,50 +18,8 @@ def get_spark_session(session_name: str) -> SparkSession:
     return SparkSession.builder.appName(session_name).getOrCreate()
 
 
-def get_config(config_path: str) -> dict[str, Any]:
-    """Load and validate the consumer config from a JSON file.
-
-    Args:
-        config_path: Path to the JSON configuration file.
-
-    Returns:
-        Validated config dict.
-
-    Raises:
-        FileNotFoundError: If the config file does not exist.
-        TypeError: If kafka_topic is not a string.
-    """
-    if not os.path.isfile(config_path):
-        raise FileNotFoundError(
-            f"No config file found at {config_path}. Config file is required."
-        )
-    logger.info("Reading config file at %s", config_path)
-    with open(config_path) as f:
-        config: dict[str, Any] = json.load(f)
-    _validate_config(config)
-    return config
-
-
-def _validate_config(config: dict[str, Any]) -> None:
-    """Raise if the config is missing or has an invalid kafka_topic."""
-    if not config.get("kafka_topic"):
-        raise KeyError("kafka_topic key not found in config.")
-    if isinstance(config["kafka_topic"], list):
-        raise TypeError("Lists of topics not supported. Topic must be a string.")
-    if not isinstance(config["kafka_topic"], str):
-        raise TypeError("Topic must be a string.")
-
-
-def get_latest_schema(schema_registry_url: str, topic: str) -> Any:
-    """Fetch the latest registered schema version for a topic.
-
-    Args:
-        schema_registry_url: URL of the Confluent Schema Registry.
-        topic: Kafka topic name used as the schema subject.
-
-    Returns:
-        RegisteredSchema object from the registry.
-    """
+def get_latest_schema(schema_registry_url: str, topic: str) -> RegisteredSchema:
+    """Fetch the latest registered schema version for a topic (its subject)."""
     client = SchemaRegistryClient({"url": schema_registry_url})
     return client.get_latest_version(topic)
 
@@ -78,16 +30,9 @@ def create_streaming_df(
     kafka_broker_url: str,
     kafka_group_id: str,
 ) -> DataFrame:
-    """Create a Spark Structured Streaming DataFrame reading from Kafka.
+    """Create a Structured Streaming DataFrame over the topic, from the earliest offset.
 
-    Args:
-        spark: Active SparkSession.
-        kafka_topic: Topic to subscribe to.
-        kafka_broker_url: Kafka bootstrap server address.
-        kafka_group_id: Consumer group ID.
-
-    Returns:
-        Streaming DataFrame with Kafka metadata columns.
+    The frame carries Kafka's metadata columns alongside the binary message value.
     """
     logger.info("Initializing Spark streaming DataFrame")
     return (
@@ -100,32 +45,6 @@ def create_streaming_df(
     )
 
 
-def deserialize_message(
-    row: Any,
-    schema_client: SchemaRegistryClient,
-    schema_str: str,
-    topic: str,
-) -> dict[str, Any]:
-    """Deserialize a single Avro-encoded Kafka message value.
-
-    Args:
-        row: A Spark Row with a binary value column.
-        schema_client: Initialized SchemaRegistryClient.
-        schema_str: Avro schema string for deserialization.
-        topic: Kafka topic name for serialization context.
-
-    Returns:
-        Deserialized message as a dict.
-    """
-    deserializer = AvroDeserializer(
-        schema_registry_client=schema_client, schema_str=schema_str
-    )
-    message: dict[str, Any] = deserializer(
-        row.value, SerializationContext(topic, MessageField.VALUE)
-    )
-    return message
-
-
 def write_to_cassandra(batch_df: DataFrame) -> None:
     """Write a micro-batch DataFrame to the Cassandra events table."""
     batch_df.write.format("org.apache.spark.sql.cassandra").mode("append").options(
@@ -133,25 +52,34 @@ def write_to_cassandra(batch_df: DataFrame) -> None:
     ).save()
 
 
-if __name__ == "__main__":
-    config = get_config("config.json")
-
-    schema_registry_url: str = config["schema_registry_url"]
-    kafka_broker_url: str = config["kafka_broker_url"]
-    kafka_topic: str = config["kafka_topic"]
-    kafka_group_id: str = config["kafka_group_id"]
+def main() -> None:
+    """Stream the topic's raw messages into Cassandra until the job is stopped."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format=(
+            "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+        ),
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+    )
+    logger.info("Reading config file at %s", CONFIG_PATH)
+    config = load_config(CONFIG_PATH)
 
     spark = get_spark_session("Spark Avro Consumer")
     spark.sparkContext.setLogLevel("WARN")
 
-    latest_schema = get_latest_schema(schema_registry_url, kafka_topic)
-    schema_broadcast = spark.sparkContext.broadcast(
-        (latest_schema.schema.schema_str, kafka_topic)
+    # Fails fast when the topic has no registered schema; the stream itself writes
+    # the raw Avro bytes.
+    get_latest_schema(config.schema_registry_url, config.kafka_topic)
+
+    df = create_streaming_df(
+        spark, config.kafka_topic, config.kafka_broker_url, config.kafka_group_id
     )
-
-    df = create_streaming_df(spark, kafka_topic, kafka_broker_url, kafka_group_id)
     processed_df = df.withColumn("value", sql.col("value").cast("binary"))
-
     processed_df.writeStream.foreachBatch(
         lambda batch_df, _: write_to_cassandra(batch_df)
     ).start().awaitTermination()
+
+
+if __name__ == "__main__":
+    main()

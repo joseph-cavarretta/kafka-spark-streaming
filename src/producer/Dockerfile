@@ -5,9 +5,10 @@ WORKDIR /app
 ADD ./producer/producer.py /app/
 ADD ./producer/publish.py /app/
 ADD config.json /app/
+ADD streaming_config.py /app/
 ADD events.avsc /app/
 
 USER root
-RUN pip install urllib3 requests confluent-kafka confluent-kafka[avro]
+RUN pip install urllib3 requests confluent-kafka confluent-kafka[avro] pydantic tenacity
 
 ENTRYPOINT [ "python3", "/app/publish.py" ]

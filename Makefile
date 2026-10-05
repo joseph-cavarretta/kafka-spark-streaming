@@ -12,12 +12,13 @@ format:
 	uv run ruff format .
 
 type-check:
-	uv run mypy src
+	uv run mypy .
 
 check:
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy src
+	uv run python ../agent-dev-harness/python-styleguide/docstring_length.py .
+	uv run mypy .
 
 # --- stack ---
 

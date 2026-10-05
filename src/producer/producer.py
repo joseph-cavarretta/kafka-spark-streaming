@@ -1,133 +1,98 @@
-import json
 import logging
-import os
 import random
-import sys
 import time
 import uuid
-from typing import Any
+from pathlib import Path
 
 from confluent_kafka import avro
 from confluent_kafka.avro import AvroProducer, CachedSchemaRegistryClient
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
+from pydantic import BaseModel, ConfigDict
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_incrementing,
 )
+
+from streaming_config import StreamingConfig, require_file
+
+logger = logging.getLogger(__name__)
+
+DEVICES = ("mobile", "tablet", "laptop")
+EVENTS = ("click", "pageview", "login", "download")
+USERS_PER_EVENT = 100
+# One first attempt plus two retries, waiting 1s then 2s.
+SCHEMA_REGISTRATION_ATTEMPTS = 3
+
+
+class UserEvent(BaseModel):
+    """One synthetic user event, shaped like the events.avsc schema."""
+
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+    event_timestamp: int
+    event_id: int
+    event_type: str
+    device_type: str
+    user_id: str
 
 
 class MockAvroProducer:
     """Kafka Avro producer that generates and publishes synthetic user events."""
 
-    def __init__(self, config_path: str, schema_path: str) -> None:
-        self.logger = logging.getLogger(__name__)
-        self.config_path = config_path
-        self.schema_path = schema_path
-        self.config = self._get_config()
-        self.topic = self._get_topic()
-        self.schema_client = self._get_schema_client()
-        self.schema_id = self._register_schema()
-        self.schema = self._get_schema()
-
-    def _get_config(self) -> dict[str, Any]:
-        """Load producer configuration from the JSON config file."""
-        if not os.path.isfile(self.config_path):
-            raise FileNotFoundError(
-                f"No config file found at {self.config_path}. Config file is required."
-            )
-        self.logger.info("Reading config file for producer at %s ...", self.config_path)
-        with open(self.config_path) as f:
-            config: dict[str, Any] = json.load(f)
-        return config
-
-    def _get_topic(self) -> str:
-        """Validate and return the Kafka topic name from config."""
-        topic = self.config["kafka_topic"]
-        if isinstance(topic, list):
-            raise TypeError("Lists of topics not supported. Topic must be a string.")
-        if not isinstance(topic, str):
-            raise TypeError("Topic must be a string.")
-        return topic
-
-    def _get_schema_client(self) -> CachedSchemaRegistryClient:
-        """Instantiate a cached schema registry client."""
-        self.logger.info(
+    def __init__(self, config: StreamingConfig, schema_path: Path) -> None:
+        self.config = config
+        self.topic = config.kafka_topic
+        logger.info(
             "Retrieving cached schema registry client for %s",
-            self.config["schema_registry_url"],
+            config.schema_registry_url,
         )
-        return CachedSchemaRegistryClient({"url": self.config["schema_registry_url"]})
+        self.schema_client = CachedSchemaRegistryClient(
+            {"url": config.schema_registry_url}
+        )
+        self.schema_id = self._register_schema(schema_path)
+        logger.info("Fetching registered schema with id %d ...", self.schema_id)
+        self.schema = self.schema_client.get_by_id(self.schema_id)
 
-    def _register_schema(self, max_retries: int = 2) -> int:
-        """Register the Avro schema with the schema registry, with retries.
+    def _register_schema(self, schema_path: Path) -> int:
+        """Register the Avro schema with the registry and return its id."""
+        require_file(schema_path, "schema")
+        logger.info("Registering schema from %s ...", schema_path)
+        schema = avro.loads(schema_path.read_text())
 
-        Args:
-            max_retries: Number of additional attempts after the first failure.
+        @retry(
+            retry=retry_if_exception_type(avro.error.ClientError),
+            stop=stop_after_attempt(SCHEMA_REGISTRATION_ATTEMPTS),
+            wait=wait_incrementing(start=1, increment=1),
+            before_sleep=before_sleep_log(logger, logging.ERROR),
+            reraise=True,
+        )
+        def register() -> int:
+            schema_id: int = self.schema_client.register(self.topic, schema)
+            return schema_id
 
-        Returns:
-            The integer schema ID assigned by the registry.
-
-        Raises:
-            FileNotFoundError: If the schema file does not exist.
-            avro.error.ClientError: If all registration attempts fail.
-        """
-        if not os.path.isfile(self.schema_path):
-            raise FileNotFoundError(
-                f"No schema file found at {self.schema_path}. Schema file is required."
-            )
-        self.logger.info("Registering schema from %s ...", self.schema_path)
-        with open(self.schema_path) as f:
-            schema = avro.loads(f.read())
-
-        for attempt in range(max_retries + 1):
-            try:
-                self.logger.info("Schema registration attempt #%d ...", attempt + 1)
-                schema_id: int = self.schema_client.register(self.topic, schema)
-                return schema_id
-            except avro.error.ClientError as err:
-                self.logger.error(err)
-                if attempt == max_retries:
-                    raise
-                backoff = attempt + 1
-                self.logger.info("Retrying in %d seconds", backoff)
-                time.sleep(backoff)
-        raise AssertionError("unreachable: retry loop always returns or raises")
-
-    def _get_schema(self) -> object:
-        """Fetch the registered schema object by ID."""
-        self.logger.info("Fetching registered schema with id %d ...", self.schema_id)
-        return self.schema_client.get_by_id(self.schema_id)
+        return register()
 
     def avro_producer(self) -> AvroProducer:
         """Build and return a configured AvroProducer."""
-        self.logger.info(
-            "Setting up Avro Producer for %s ...", self.config["kafka_broker_url"]
-        )
+        logger.info("Setting up Avro Producer for %s ...", self.config.kafka_broker_url)
         return AvroProducer(
-            {"bootstrap.servers": self.config["kafka_broker_url"]},
+            {"bootstrap.servers": self.config.kafka_broker_url},
             schema_registry=self.schema_client,
             default_value_schema=self.schema,
         )
 
-    def generate_data(self, event_id: int) -> dict[str, Any]:
-        """Generate a single synthetic user event record.
-
-        Args:
-            event_id: Sequential identifier for the event.
-
-        Returns:
-            Dict matching the events Avro schema.
-        """
-        devices = ["mobile", "tablet", "laptop"]
-        events = ["click", "pageview", "login", "download"]
-        users = [str(uuid.uuid4()) for _ in range(100)]
-        data = {
-            "event_timestamp": int(time.time()),
-            "event_id": event_id,
-            "event_type": random.choice(events),
-            "device_type": random.choice(devices),
-            "user_id": random.choice(users),
-        }
-        self.logger.info("Message generated: %s", data)
-        return data
+    def generate_data(self, event_id: int) -> UserEvent:
+        """Generate one synthetic event with a random type, device, and user."""
+        users = [str(uuid.uuid4()) for _ in range(USERS_PER_EVENT)]
+        # Mock data, so non-cryptographic randomness is fine.
+        event = UserEvent(
+            event_timestamp=int(time.time()),
+            event_id=event_id,
+            event_type=random.choice(EVENTS),  # noqa: S311
+            device_type=random.choice(DEVICES),  # noqa: S311
+            user_id=random.choice(users),  # noqa: S311
+        )
+        logger.info("Message generated: %s", event.model_dump())
+        return event

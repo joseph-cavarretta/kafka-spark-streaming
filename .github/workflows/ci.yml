@@ -6,37 +6,40 @@ on:
   pull_request:
 
 jobs:
-  lint:
-    name: Lint
+  check:
+    name: Lint, types
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: repo
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: repo
+
+      # pyproject.toml extends the shared lint baseline by relative path, so check
+      # agent-dev-harness out next to this repo.
+      - uses: actions/checkout@v7
+        with:
+          repository: joseph-cavarretta/agent-dev-harness
+          path: agent-dev-harness
 
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+          cache-dependency-glob: repo/uv.lock
 
-      - name: Install dev tools (validates lockfile)
-        run: uv sync --locked --only-group dev
+      - name: Install project (validates lockfile)
+        run: uv sync --locked
 
-      - name: Ruff lint (incl. security rules)
+      - name: Ruff lint
         run: uv run --no-sync ruff check .
 
       - name: Ruff format
         run: uv run --no-sync ruff format --check .
 
-  typecheck:
-    name: Type check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Install project (validates lockfile)
-        run: uv sync --locked
+      - name: Docstring length
+        run: uv run --no-sync python ../agent-dev-harness/python-styleguide/docstring_length.py .
 
       - name: Mypy
-        run: uv run --no-sync mypy src
+        run: uv run --no-sync mypy .
