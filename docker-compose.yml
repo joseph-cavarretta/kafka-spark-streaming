@@ -10,7 +10,7 @@ networks:
 
 services:
   zookeeper:  
-    image: bitnami/zookeeper:latest
+    image: bitnamilegacy/zookeeper:latest
     container_name: zookeeper
     hostname: zookeeper
     ports:
@@ -26,7 +26,8 @@ services:
         ipv4_address: 172.18.0.2
 
   kafka:
-    image: bitnami/kafka:latest
+    # 3.9 is the last Kafka line with the ZooKeeper mode configured below.
+    image: bitnamilegacy/kafka:3.9
     container_name: kafka
     hostname: kafka
     ports:
@@ -72,12 +73,11 @@ services:
         ipv4_address: 172.18.0.4
 
   spark:
-    image: bitnami/spark:3
     container_name: spark-master
     hostname: spark-master
     build:
-      context: ./src
-      dockerfile: consumer/Dockerfile
+      context: .
+      dockerfile: src/consumer/Dockerfile
     ports:
       - 7077:7077  # Spark master port
       - 8080:8080  # Spark UI port
@@ -100,7 +100,7 @@ services:
         ipv4_address: 172.18.0.5
 
   cassandra:
-    image: bitnami/cassandra:latest
+    image: bitnamilegacy/cassandra:latest
     container_name: cassandra
     hostname: cassandra
     ports:
@@ -121,12 +121,11 @@ services:
         ipv4_address: 172.18.0.6
 
   python-producer:
-    image: python:3.12.1-slim
     container_name: python-producer
     hostname: python-producer
     build:
-      context: ./src
-      dockerfile: producer/Dockerfile
+      context: .
+      dockerfile: src/producer/Dockerfile
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - KAFKA_TOPIC=test-topic
