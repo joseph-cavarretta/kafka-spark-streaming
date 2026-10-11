@@ -6,7 +6,8 @@ WORKDIR /app
 USER root
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
-COPY pyproject.toml uv.lock ./
+# .python-version pins the interpreter uv uses; without it uv picks the newest.
+COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-install-project --only-group consumer
 
 COPY src/consumer/spark_streaming.py src/streaming_config.py src/config.json \
