@@ -17,6 +17,20 @@ dev = [
     "ruff>=0.16",
     "mypy>=2.3.0",
 ]
+# What each container installs (uv sync --only-group <name>). The consumer leaves out
+# pyspark: spark-submit puts the Spark image's own pyspark on the path.
+producer = [
+    "confluent-kafka[avro]>=2.15.0",
+    "pydantic>=2",
+    "requests>=2.32.0",
+    "tenacity>=8",
+]
+consumer = [
+    "confluent-kafka[avro]>=2.15.0",
+    "fastavro>=1.9.0",
+    "pydantic>=2",
+    "requests>=2.32.0",
+]
 
 [tool.ruff]
 extend = "../agent-dev-harness/python-styleguide/ruff-base.toml"

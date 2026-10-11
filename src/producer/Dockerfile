@@ -1,14 +1,16 @@
 FROM python:3.12.1-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 WORKDIR /app
 
-ADD ./producer/producer.py /app/
-ADD ./producer/publish.py /app/
-ADD config.json /app/
-ADD streaming_config.py /app/
-ADD events.avsc /app/
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 
-USER root
-RUN pip install urllib3 requests confluent-kafka confluent-kafka[avro] pydantic tenacity
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-install-project --only-group producer
+
+COPY src/producer/producer.py src/producer/publish.py src/streaming_config.py \
+     src/config.json src/events.avsc /app/
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 ENTRYPOINT [ "python3", "/app/publish.py" ]
